@@ -1,0 +1,236 @@
+﻿@page
+@model novasoft_technical_test.Pages.Invoices.InvoicesCreateModel
+@{
+    ViewData["Title"] = "Create Invoice";
+}
+
+<div class="container mt-4">
+    <h2 class="mb-4 text-primary">Create Invoice</h2>
+
+    <form method="post" class="card shadow p-4">
+        <!-- CUSTOMER INFO -->
+        <fieldset class="mb-4">
+            <legend class="fw-bold text-secondary">Customer Information</legend>
+
+            <div class="mb-3">
+                <label class="form-label">Document Number</label>
+                <input asp-for="Customer.DocumentNumber" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">First Name</label>
+                <input asp-for="Customer.FirstName" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Last Name</label>
+                <input asp-for="Customer.LastName" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Address</label>
+                <input asp-for="Customer.Address" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Phone</label>
+                <input asp-for="Customer.Phone" class="form-control" />
+            </div>
+        </fieldset>
+
+        <!-- INVOICE DETAILS -->
+        <fieldset class="mb-4">
+            <legend class="fw-bold text-secondary">Invoice Details</legend>
+            <section id="items" class="mb-3">
+                <span class="itemForm row g-3 align-items-center border rounded p-3 mb-2" style="display:none">
+                    <div class="col-12 text-end">
+                        <button type="button" class="btn btn-sm btn-danger itemDeleteBtn">Remove</button>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Product Code</label>
+                        <input class="form-control productCode"
+                               type="number"
+                               step="1"
+                               min="1"
+                               required
+                               pattern="\d+" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Quantity</label>
+                        <input class="form-control quantity"
+                               type="number"
+                               step="1"
+                               min="1"
+                               required
+                               pattern="\d+" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Unit Price</label>
+                        <input class="form-control unitPrice"
+                               type="number"
+                               step="1"
+                               min="1"
+                               required
+                               pattern="\d+" />
+                    </div>
+                </span>
+            </section>
+            <button id="addItemBtn" type="button" class="btn btn-outline-primary">➕ Add a new product</button>
+        </fieldset>
+
+        <!-- TOTALS -->
+        <fieldset class="mb-4">
+            <legend class="fw-bold text-secondary">Total invoice prices</legend>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Gross Amount</label>
+                    <input id="grossAmount" class="form-control" disabled />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Discount Amount</label>
+                    <input id="discountAmount" class="form-control" disabled />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Tax Amount</label>
+                    <input id="taxAmount" class="form-control" disabled />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Total Amount</label>
+                    <input id="totalAmount" class="form-control" disabled />
+                </div>
+            </div>
+        </fieldset>
+
+        <div class="text-end">
+            <button type="submit" class="btn btn-success">💾 Save Invoice</button>
+        </div>
+    </form>
+
+    <!-- MENSAJE DE ÉXITO -->
+    @if (!string.IsNullOrEmpty(Model.Message))
+    {
+        <div class="alert alert-success mt-3">@Model.Message</div>
+    }
+
+    <!-- MENSAJE DE ERROR -->
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger mt-3">
+            @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+            {
+                <p>@error.ErrorMessage</p>
+            }
+        </div>
+    }
+
+</div>
+
+@section Scripts{
+    <script>
+        let itemContainer = document.getElementById("items");
+        let addItemButton = document.getElementById("addItemBtn");
+
+        let itemForm = document.querySelector(".itemForm");
+        let items = [];
+        let highestId = 0;
+
+        function generateHexId(length = 8) {
+            let hexId = '';
+            const hexChars = '0123456789abcdef';
+
+            for (let i = 0; i < length; i++) {
+                hexId += hexChars[Math.floor(Math.random() * 16)];
+            }
+
+            return hexId;
+        }
+
+        function calculatePrices(){
+            const payload = items.map(({ unitPrice, quantity}) => {
+                return {
+                    UnitPrice: unitPrice,
+                    Quantity: quantity
+                }
+            })
+            fetch("?handler=CalculateInvoiceAmounts", {method:"POST", headers: {"Content-Type": "application/json","RequestVerificationToken": document.querySelector('input[name="__RequestVerificationToken"]').value}, body: JSON.stringify(payload)})
+            .then((r)=> r.json())
+            .then((invoicePrices)=>{
+                document.getElementById("grossAmount").value = invoicePrices.grossAmount
+                document.getElementById("discountAmount").value = invoicePrices.discountAmount
+                document.getElementById("taxAmount").value = invoicePrices.vatAmount
+                document.getElementById("totalAmount").value = invoicePrices.totalAmount
+            }).catch(err => console.error("Error:", err));
+        }
+
+        function updateItemList(items) {
+            const nodes = [];
+            for(let i = 0; i < items.length; i++) {
+                const formClone = itemForm.cloneNode(true);
+
+                const pc = formClone.querySelector(".productCode");
+                const up = formClone.querySelector(".unitPrice");
+                const q = formClone.querySelector(".quantity");
+
+                pc.name=`InvoiceDetails[${i}].ProductCode`;
+                up.name=`InvoiceDetails[${i}].UnitPrice`;
+                q.name=`InvoiceDetails[${i}].Quantity`;
+
+                const { id, productCode, unitPrice, quantity } = items[i];
+
+                pc.value = productCode;
+                up.value = unitPrice;
+                q.value = quantity;
+                listenToChanges(formClone, { id })
+
+                formClone.style.removeProperty("display");
+                nodes.push(formClone);
+            }
+            itemContainer.replaceChildren(...nodes);
+        }
+
+        function listenToChanges(formClone, { id }) {
+            const pc = formClone.querySelector(".productCode");
+            const up = formClone.querySelector(".unitPrice");
+            const q = formClone.querySelector(".quantity");
+            const deleteBtn = formClone.querySelector(".itemDeleteBtn");
+
+            function updateElement(id, newPayload) {
+                const idx = items.findIndex(i => i.id === id);
+                if(idx == -1) return;
+                const payload = items[idx];
+                items.splice(idx, 1, { ...payload, ...newPayload });
+            }
+
+            pc.addEventListener("change", (e) => updateElement(id, { productCode: parseInt(pc.value) }));
+            up.addEventListener("change", (e) => { 
+                updateElement(id, { unitPrice: parseFloat(up.value) });
+                calculatePrices();
+            });
+            q.addEventListener("change", (e) => { 
+                updateElement(id, { quantity: parseInt(q.value) })
+                calculatePrices();
+            });
+            deleteBtn.addEventListener("click", () => {
+                items = items.filter(i => i.id !== id);
+                updateItemList(items);
+            });
+        }
+
+        function addItem () {
+            const hexId = generateHexId();
+            items.push({
+                id: hexId,
+                productCode: highestId,
+                quantity: 0,
+                unitPrice: 0,
+            });
+            highestId++;
+            updateItemList(items);
+            calculatePrices();
+        }
+
+        addItemButton.addEventListener("click", () => {
+            addItem();
+        })
+    </script>
+}
+
